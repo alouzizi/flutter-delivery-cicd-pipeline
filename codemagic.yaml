@@ -1,0 +1,92 @@
+# Codemagic CI/CD configuration for Flutter applications
+# This file defines automated build, test, and deployment workflows
+
+workflows:
+  # TestFlight workflow - builds and deploys iOS app to TestFlight
+  testFlight:
+    name: "Flutter CI/CD"
+    # Specifies the macOS machine type to run the build on
+    instance_type: mac_mini_m2
+    # Maximum duration in minutes before the build times out
+    max_build_duration: 15
+    # External service connections
+    integrations:
+      # Reference to App Store Connect API key configured in Codemagic
+      app_store_connect: Your-App-Store-API-Key-Name
+    # Build environment configuration
+    environment:
+      # Flutter SDK version
+      flutter: 3.27.1
+      # Always use the latest stable Xcode version
+      xcode: latest
+      # Use the default CocoaPods version
+      cocoapods: default
+      # iOS code signing configuration
+      ios_signing:
+        # Provisioning profiles to use for signing
+        provisioning_profiles:
+          - Your_Provisioning_Profile_Ref
+        # Certificates to use for signing
+        certificates:
+          - Your_Certificate_Ref
+    # Configure when this workflow should be triggered
+    triggering:
+      events:
+        - push      # Trigger on code pushes
+        - tag       # Trigger on new tags
+        - pull_request  # Trigger on pull requests
+      branch_patterns:
+        # Only run on specific branches
+        - pattern: 'master'
+          include: true
+        - pattern: 'develop'
+          include: true
+        - pattern: 'release/*'
+          include: true
+    # Build steps to execute in sequence
+    scripts:
+      # Set up iOS code signing
+      - name: Set up code signing settings on Xcode project
+        script: |
+          xcode-project use-profiles
+      # Get Flutter dependencies
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      # Run automated tests
+      - name: Run Flutter tests
+        script: |
+          flutter test
+      # Automatically increment build number
+      - name: Increment build number
+        script: |
+          cd ios
+          # Get the latest build number from TestFlight and increment by 1
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-testflight-build-number "$APP_BUNDLE_ID")
+          cd ..
+          flutter build ios --build-number=$((LATEST_BUILD_NUMBER + 1)) --no-codesign
+      # Build the iOS IPA file for distribution
+      - name: flutter build ipa
+        script: |
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+    # Files to save after the build completes
+    artifacts:
+      - build/ios/ipa/*.ipa              # iOS IPA files
+      - flutter_drive.log                # Integration test logs
+    # Distribution configuration
+    publishing:
+      # Email notification settings
+      email:
+        recipients:
+          - your-email@example.com
+        notify:
+          success: true  # Send email on successful builds
+          failure: true  # Send email on failed builds
+      # TestFlight/App Store Connect publishing
+      app_store_connect:
+        auth: integration  # Use the integration specified above
+        submit_to_testflight: true  # Upload to TestFlight
+        beta_groups:  # Specify TestFlight beta testing groups
+          - "Internal Testers"
+          - "External Testers"
