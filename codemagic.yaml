@@ -16,7 +16,7 @@ workflows:
     # Build environment configuration
     environment:
       # Flutter SDK version
-      flutter: 3.27.1
+      flutter: stable
       # Always use the latest stable Xcode version
       xcode: latest
       # Use the default CocoaPods version
@@ -79,7 +79,8 @@ workflows:
       # Email notification settings
       email:
         recipients:
-          - your-email@example.com
+          - user_1@example.com
+          - user_2@example.com
         notify:
           success: true  # Send email on successful builds
           failure: true  # Send email on failed builds
@@ -90,3 +91,61 @@ workflows:
         beta_groups:  # Specify TestFlight beta testing groups
           - "Internal Testers"
           - "External Testers"
+
+
+ # Android specific workflow for Play Store releases
+  android_release:
+    name: "Android Release"
+    # Use Linux instance for Android builds (more cost-effective)
+    instance_type: linux_x2
+    max_build_duration: 45
+    environment:
+      flutter: 3.27.1
+      # Android signing configuration
+      android_signing:
+        - keystore_reference  # Reference to keystore configured in Codemagic
+    # Only trigger on production branches
+    triggering:
+      events:
+        - push
+        - tag
+      branch_patterns:
+        - pattern: 'master'
+          include: true
+        - pattern: 'release/*'
+          include: true
+    # Build steps
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter packages pub get
+      - name: Run Flutter tests
+        script: |
+          flutter test
+      # Build Android App Bundle (AAB) for Play Store submission
+      - name: Build AAB
+        script: |
+          flutter build appbundle --release
+      # Build APKs split by ABI for direct distribution
+      - name: Build APK for distribution
+        script: |
+          flutter build apk --release --split-per-abi
+    # Save both AAB and APK files
+    artifacts:
+      - build/**/outputs/**/*.aab
+      - build/**/outputs/**/*.apk
+    # Publishing configuration
+    publishing:
+      email:
+        recipients:
+          - user_1@example.com
+          - user_2@example.com
+        notify:
+          success: true
+          failure: true
+      # Google Play publishing 
+      google_play:
+        # Reference to Google Play service account credentials
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal  # Publish to internal testing track
+        submit_as_draft: true  # Submit as draft for review before release
